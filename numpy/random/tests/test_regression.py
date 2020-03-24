@@ -85,6 +85,17 @@ class TestRegression:
         np.random.multivariate_normal([0], [[0]], size=np.int_(1))
         np.random.multivariate_normal([0], [[0]], size=np.int64(1))
 
+    def test_multivariate_normal_broadcast_input(self):
+        # Test for [ENH] random.multivariate_normal should broadcast input.
+        # See issue #14816
+        P = [[1,0.5],[0.5,1]]
+        M = np.random.multivariate_normal(mean=[0,0], cov=P, size=3)
+        X = np.random.multivariate_normal(mean=M, cov=P)
+        assert_array_equal(X.shape, (3, 2))
+
+        X2 = np.random.multivariate_normal(mean=M, cov=P, size=(5,4))
+        assert_array_equal(X2.shape, (5, 4, 3, 2))
+
     def test_beta_small_parameters(self):
         # Test that beta with small a and b parameters does not produce
         # NaNs due to roundoff errors causing 0 / 0, gh-5851

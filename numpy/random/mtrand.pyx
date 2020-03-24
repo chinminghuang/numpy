@@ -3954,7 +3954,7 @@ cdef class RandomState:
 
         Parameters
         ----------
-        mean : 1-D array_like, of length N
+        mean : 1-D array_like, of length N or 2-D array_like with shape (x, N)
             Mean of the N-dimensional distribution.
         cov : 2-D array_like, of shape (N, N)
             Covariance matrix of the distribution. It must be symmetric and
@@ -4056,11 +4056,13 @@ cdef class RandomState:
         else:
             shape = size
 
-        if len(mean.shape) != 1:
-            raise ValueError("mean must be 1 dimensional")
+        if len(mean.shape) not in (1, 2):
+            raise ValueError("mean must be 1 or 2 dimensional")
         if (len(cov.shape) != 2) or (cov.shape[0] != cov.shape[1]):
             raise ValueError("cov must be 2 dimensional and square")
-        if mean.shape[0] != cov.shape[0]:
+
+        dim_idx = 0 if len(mean.shape) == 1 else 1
+        if mean.shape[dim_idx] != cov.shape[0]:
             raise ValueError("mean and cov must have same length")
 
         # Compute shape of output and create a matrix of independent
@@ -4068,8 +4070,8 @@ cdef class RandomState:
         # with the same length as mean and as many rows are necessary to
         # form a matrix of shape final_shape.
         final_shape = list(shape[:])
-        final_shape.append(mean.shape[0])
-        x = self.standard_normal(final_shape).reshape(-1, mean.shape[0])
+        final_shape.extend(mean.shape)
+        x = self.standard_normal(final_shape)
 
         # Transform matrix of standard normals into matrix where each row
         # contains multivariate normals with the desired covariance.
