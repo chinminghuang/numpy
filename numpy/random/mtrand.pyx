@@ -3934,6 +3934,7 @@ cdef class RandomState:
         return int64_to_long(out)
 
     # Multivariate distributions:
+    @cython.wraparound(True)
     def multivariate_normal(self, mean, cov, size=None, check_valid='warn',
                             tol=1e-8):
         """
@@ -4044,6 +4045,7 @@ cdef class RandomState:
         [True, True] # random
 
         """
+        from itertools import cycle
         from numpy.dual import svd
 
         # Check preconditions on arguments
@@ -4056,20 +4058,21 @@ cdef class RandomState:
         else:
             shape = size
 
-        if len(mean.shape) != 1:
-            raise ValueError("mean must be 1 dimensional")
-        if (len(cov.shape) != 2) or (cov.shape[0] != cov.shape[1]):
-            raise ValueError("cov must be 2 dimensional and square")
-        if mean.shape[0] != cov.shape[0]:
-            raise ValueError("mean and cov must have same length")
+        if cov.shape[-1] != cov.shape[-2]:
+            raise ValueError("cov must be sqaure")
+        if mean.shape[-1] != cov.shape[-1]:
+            raise ValueError("mean and cov must have the same length")
+        if len(mean.shape) > 1 and len(cov.shape) > 2:  # TODO: Add broadcast
+            if mean.shape[:-1] != cov.shape[:-2]:
+                raise ValueError("mean and cov must have the same brocast dimension")
 
         # Compute shape of output and create a matrix of independent
         # standard normally distributed random numbers. The matrix has rows
         # with the same length as mean and as many rows are necessary to
         # form a matrix of shape final_shape.
         final_shape = list(shape[:])
-        final_shape.append(mean.shape[0])
-        x = self.standard_normal(final_shape).reshape(-1, mean.shape[0])
+        final_shape.extend(mean.shape)
+        x = self.standard_normal(final_shape)
 
         # Transform matrix of standard normals into matrix where each row
         # contains multivariate normals with the desired covariance.
@@ -4086,27 +4089,33 @@ cdef class RandomState:
         # been checked.
 
         # GH10839, ensure double to make tol meaningful
+        norm_dim = mean.shape[-1]
         cov = cov.astype(np.double)
-        (u, s, v) = svd(cov)
+        ret = []
+        for partial_m, partial_c, partial_x in zip(cycle(mean.reshape(-1, norm_dim)),
+                                                   cycle(cov.reshape(-1, norm_dim, norm_dim)),
+                                                   x.reshape(-1, norm_dim)):
+            (u, s, v) = svd(partial_c)
 
-        if check_valid != 'ignore':
-            if check_valid != 'warn' and check_valid != 'raise':
-                raise ValueError(
-                    "check_valid must equal 'warn', 'raise', or 'ignore'")
-
-            psd = np.allclose(np.dot(v.T * s, v), cov, rtol=tol, atol=tol)
-            if not psd:
-                if check_valid == 'warn':
-                    warnings.warn("covariance is not positive-semidefinite.",
-                        RuntimeWarning)
-                else:
+            if check_valid != 'ignore':
+                if check_valid != 'warn' and check_valid != 'raise':
                     raise ValueError(
-                        "covariance is not positive-semidefinite.")
+                        "check_valid must equal 'warn', 'raise', or 'ignore'")
 
-        x = np.dot(x, np.sqrt(s)[:, None] * v)
-        x += mean
-        x.shape = tuple(final_shape)
-        return x
+                psd = np.allclose(np.dot(v.T * s, v), partial_c, rtol=tol, atol=tol)
+                if not psd:
+                    if check_valid == 'warn':
+                        warnings.warn("covariance is not positive-semidefinite.",
+                                      RuntimeWarning)
+                    else:
+                        raise ValueError(
+                            "covariance is not positive-semidefinite.")
+
+            partial_x = np.dot(partial_x, np.sqrt(s)[:, None] * v)
+            partial_x += partial_m
+            ret.extend(partial_x)
+
+        return np.array(ret).reshape(final_shape)
 
     def multinomial(self, np.npy_intp n, object pvals, size=None):
         """

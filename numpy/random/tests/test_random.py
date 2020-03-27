@@ -727,6 +727,25 @@ class TestRandomDist:
             w = sup.record(RuntimeWarning)
             assert len(w) == 0
 
+        # Check mean more than 1-D
+        np.random.seed(self.seed)
+        mean = [[2, 2], [3, 3], [5, 5]]
+        cov = [[[1, 0], [0, 1]],
+               [[2, 1], [1, 2]],
+               [[3, 1], [1, 3]]]
+        size = (1, 2)
+        desired_dim = size + np.array(mean).shape
+        desired = np.array([[[[3.3401634577186314, 3.737591227719361],
+                              [1.3257969638930789, 1.0024464621909939],
+                              [-0.0426407726346083, 4.298009119478496]],
+                             [[3.596452649201865, 1.2305484436483054],
+                              [2.391059830309285, 2.22238632361183],
+                              [6.00610094343017, 4.40829419051593]]]])
+
+        actual = np.random.multivariate_normal(mean, cov, size)
+        assert_array_equal(np.array(actual).shape, desired_dim)
+        assert_array_almost_equal(actual, desired, decimal=15)
+
     def test_negative_binomial(self):
         np.random.seed(self.seed)
         actual = np.random.negative_binomial(n=100, p=.12345, size=(3, 2))
